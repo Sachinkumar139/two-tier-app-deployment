@@ -1,0 +1,70 @@
+name: Docker CI/CD Pipeline
+
+# Trigger workflow when code pushed to main branch
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+
+  # Build Job
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # Step 1 - Checkout repository code
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # Step 2 - Login to DockerHub
+      - name: DockerHub Login
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      # Step 3 - Build Docker Image
+      - name: Build Docker Image
+        run: |
+          docker build -t techsoumen/two-tier-remider-app:${{ github.sha }} .
+
+      # Step 4 - Push Docker Image
+      - name: Push Docker Image
+        run: |
+          docker push techsoumen/two-tier-remider-app:${{ github.sha }}
+
+  # Deploy Job
+  deploy:
+
+    needs: build
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # SSH into server and deploy
+      - name: Deploy Application
+        uses: appleboy/ssh-action@master
+
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ubuntu
+          key: ${{ secrets.SERVER_SSH_KEY }}
+
+          script: |
+
+            # Go to project directory
+            cd /home/ubuntu/two-tier-app-deployment
+
+            # Pull latest code
+            git pull origin main
+
+            # Set image version
+            export VERSION=${{ github.sha }}
+
+            # Start containers
+            docker compose down
+            docker compose up -d
